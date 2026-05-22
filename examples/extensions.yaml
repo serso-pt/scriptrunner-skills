@@ -1,0 +1,58 @@
+# Minimal ScriptRunner Cloud configuration example
+# See https://docs.adaptavist.com/sms/latest/ for full documentation
+
+listeners:
+  - description: "Add comment on issue creation"
+    uuid: "example-listener-uuid-001"
+    events:
+      - jira:issue_created
+    file: "CommentOnCreate.groovy"
+    executionUser: ADD_ON
+    projects:
+      - "PROJ"
+
+scriptfields:
+  - name: "Date Difference"
+    uuid: "example-scriptfield-uuid-001"
+    description: "Days between creation and last update"
+    scriptedFieldType: "TEXT_FIELD"
+    file: "CalculateDateDifference.groovy"
+
+jobs:
+  - uuid: "example-job-uuid-001"
+    name: "Monthly Cleanup"
+    cronExpression: "0 0 0 1 * ?"
+    file: "MonthlyCleanup.groovy"
+    atlassianUser:
+      accountId: "YOUR_ACCOUNT_ID"
+    enabled: true
+  - uuid: "example-escalation-uuid-001"
+    name: "Notify Unresolved Subtasks"
+    cronExpression: "0 0 9 ? * MON-FRI"
+    jql: "issueType = Story AND statusCategory != Done"
+    file: "CommentOnUnresolvedSubtasks.groovy"
+    atlassianUser:
+      accountId: "YOUR_ACCOUNT_ID"
+    enabled: true
+
+behaviours:
+  - name: "Bug Description Template"
+    description: "Prefills the description field with a bug report template on load if empty"
+    uuid: "example-behaviour-uuid-001"
+    enabled: true
+    executionUser: ADD_ON
+    mappings:
+      "PROJ":
+        - "Bug"
+    config:
+      - fieldName: ""
+        fieldUuid: "description"
+        path: bugDescriptionTemplate.ts
+        event:
+          - "ONLOAD"
+        viewTypes:
+          - "GIC"
+          - "IssueTransition"
+          - "IssueView"
+        affectedFields:
+          - "description"
