@@ -158,6 +158,8 @@ Choose the section for your AI client and follow the steps.
 }
 ```
 
+> If you plan to run **two different Atlassian sites from two separate folders** using this same endpoint URL, add a differentiating query param to one entry's URL (e.g. `https://mcp.atlassian.com/v1/mcp?site=second`) so each gets its own OAuth token. See [Troubleshooting](#troubleshooting) — *Both folders/sites connect to the same Atlassian site despite separate configs*.
+
 > The `"type"` field is required. Without it, Claude Code defaults to stdio transport and rejects the config with `command: expected string, received undefined`. Use `"http"` for the `/v1/mcp` streamable HTTP endpoint.
 
 **Step 2.** Restart Claude Code (fully quit and reopen — config is only read on startup).
@@ -165,6 +167,8 @@ Choose the section for your AI client and follow the steps.
 **Step 3.** On first launch with the new config, Claude Code will prompt you to trust the `atlassian` MCP server's tools. Confirm to allow it.
 
 **Step 4.** On your first Jira query, a browser window opens for OAuth sign-in with your Atlassian account. Sign in and grant access. The token is stored — you won't be prompted again.
+
+> If your site uses **custom domains** (Jira and Confluence may resolve to different URLs like `jira.example.com` vs `confluence.example.com`), the consent screen will not let you select all apps at once. Pick **one app** and the matching site URL; use a separate MCP server entry for the other app. See [Troubleshooting](#troubleshooting) — *OAuth fails when selecting multiple apps on a custom-domain site*.
 
 **Option B — CLI only (no file needed)**
 
@@ -570,6 +574,12 @@ Ensure your network/firewall allows HTTPS connections to `https://mcp.atlassian.
 
 **Authentication keeps prompting (OAuth):**
 Remove and re-add the server in your client to trigger a fresh OAuth flow. For Claude Code: `claude mcp remove atlassian`, then `claude mcp add --transport http atlassian https://mcp.atlassian.com/v1/mcp`. For OpenCode: `opencode mcp logout atlassian && opencode mcp auth atlassian`.
+
+**OAuth fails when selecting multiple apps on a custom-domain site:**
+This only affects sites where **custom domains** are configured; sites using the default `*.atlassian.net` URL are unaffected. On such sites, Jira and Confluence may resolve to different custom-domain URLs (e.g. `jira.example.com` vs `confluence.example.com`), so no single entry in the OAuth "Choose a site" list covers both apps — selecting both causes authentication to fail. At the consent screen, pick **one app** and the site URL matching that app's domain. To use a second app on the same site, add a separate MCP server entry with a different name, authenticate it independently, and select that app's domain at its own consent screen.
+
+**Both folders/sites connect to the same Atlassian site despite separate configs:**
+This only happens when two MCP server entries point at the **same** endpoint URL (e.g. two folders both configured with `https://mcp.atlassian.com/v1/mcp` to reach different Atlassian sites). The OAuth credential is keyed by the server URL origin, so both entries share one token — the second authentication overwrites the first, and both folders end up connected to whichever site was authenticated last. Fix: keep one entry on the plain URL and give the other a differentiating query param (e.g. `https://mcp.atlassian.com/v1/mcp?site=second`). The param does **not** change which site you connect to (that is chosen at the consent screen) — it only forces a separate token store. Authenticate each folder independently. To verify isolation, from each folder ask the assistant to call `getAccessibleAtlassianResources` and confirm each returns a different `cloudId`; for a stronger check, run a JQL search for content that exists only on one site. Note that `getAccessibleAtlassianResources` may list every site the account can reach, so the `cloudId` actually hit by real queries is the definitive test — not the resource list alone.
 
 **"Permission denied" on Jira queries:**
 The MCP server uses your Atlassian account's existing permissions. If you cannot see a project in Jira, the MCP will not return data from it either.
