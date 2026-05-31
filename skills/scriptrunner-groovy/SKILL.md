@@ -141,12 +141,77 @@ conn.doOutput = true
 conn.outputStream << JsonOutput.toJson([account_id: accountId])  // snake_case, not accountId
 
 def status = conn.responseCode
-if (status >= 400 && status != 409) {
+if (status >= 400) {
     def errBody = conn.errorStream ? new JsonSlurper().parse(conn.errorStream) : "(no error stream)"
     logger.warn("Failed to add ${accountId} to group ${groupId}: HTTP ${status} | ${errBody}")
 }
-// status < 400 = added successfully; 409 = already a member (treat as success)
+// status < 400 = added (Admin v1 returns success for an already-a-member add — no 409, no special-casing needed)
 ```
+
+#### Listing group members (read) — use Jira REST, not the Admin API
+
+There is **no Admin API to list members**: `GET /admin/v1/orgs/{orgId}/directory/groups/{groupId}/memberships` returns **405** (the endpoint is POST-only). List via Jira REST `GET /rest/api/3/group/member` instead. Watch for these traps:
+
+- **Query by `groupId`**, not `groupname` (resolve the id first via `GET /rest/api/3/group`).
+- **Pass `includeInactiveUsers=true`** — the default `false` silently omits deactivated, suspended, and invited members, so your count comes up short.
+- **Filter `accountType == "atlassian"`** for real human users. The endpoint also returns `app`-type accounts (Marketplace apps, integrations, automation/service accounts) that the admin **Members** tab hides — these inflate the count well beyond what the UI shows.
+- **Don't trust the `active` field** from this endpoint — it can report `true` for suspended/deactivated users. Use `includeInactiveUsers` + `accountType` instead.
+- **Paginate by page size**, not the `isLast` flag: `isLast = body.isLast ?: true` hits the Groovy Elvis bug (`false ?: true` evaluates to `true`) and stops a page early. Stop when a page returns fewer than `maxResults`.
+
+```groovy
+def groupId = get("/rest/api/3/group")
+    .queryString("groupname", groupName)
+    .asObject(Map).body?.groupId
+
+def members    = []
+def startAt    = 0
+def maxResults = 50
+
+while (true) {
+    def resp = get("/rest/api/3/group/member")
+        .queryString("groupId", groupId)            // by id, not name
+        .queryString("includeInactiveUsers", true)  // include deactivated/suspended/invited
+        .queryString("startAt", startAt)
+        .queryString("maxResults", maxResults)
+        .asObject(Map)
+    if (resp.status >= 400) {
+        logger.warn("Failed to list members at startAt=${startAt}: HTTP ${resp.status}")
+        break
+    }
+    def values = (resp.body.values ?: []) as List
+    values.each { m ->
+        if (m.accountId && m.accountType == "atlassian") {   // humans only; skip app accounts
+            members << [accountId: m.accountId as String, displayName: m.displayName as String]
+        }
+    }
+    if (values.size() < maxResults) break   // reliable last-page signal (not isLast)
+    startAt += maxResults
+}
+```
+
+#### Removing a member (write)
+
+Same Admin v1 endpoint family as adding, but `DELETE` with the account id in the path. A 2xx response means removed. Add `Thread.sleep(100)` between calls when removing in bulk to avoid rate limits.
+
+```groovy
+def conn = new URL("https://api.atlassian.com/admin/v1/orgs/${orgId}/directory/groups/${groupId}/memberships/${accountId}").openConnection() as HttpURLConnection
+conn.requestMethod = "DELETE"
+conn.setRequestProperty("Authorization", "Bearer ${apiKey}")
+conn.setRequestProperty("Accept", "application/json")
+try {
+    def status = conn.responseCode
+    if (status < 200 || status >= 300) {
+        def errBody = conn.errorStream ? new JsonSlurper().parse(conn.errorStream) : "(no error stream)"
+        logger.warn("Failed to remove ${accountId} from group ${groupId}: HTTP ${status} | ${errBody}")
+    }
+} finally {
+    conn.disconnect()
+}
+```
+
+#### A group can grant multiple products — check before bulk-removing
+
+A single group's membership may grant access to **several products at once** (admin → the group → **Apps** tab lists each granted product and its plan — e.g. a paid product alongside one or more Free ones). Removing members from the group revokes **every** product it grants, not just the one you have in mind. To revoke a **single** product for everyone, remove that product's grant from the group's Apps tab instead of removing members.
 
 ### Comments
 
@@ -375,3 +440,9 @@ Managed by the ScriptRunner Dev & Deployment Tool (Gradle). Supports both bulk a
 - **`/admin/v2/orgs/{orgId}/directories/{directoryId}/groups/...`** — looks like a newer version but requires scopes that don't exist and returns `ADMIN-UAM-403-1`. Use v1 (no `directoryId` in path).
 - **`{"accountId": "..."}` body for the Admin API** — wrong; the Atlassian Admin REST API uses snake_case `account_id`. (camelCase `accountId` is correct for Jira REST only.)
 - **String interpolation for query parameters** — `get("/rest/api/3/group?groupname=${groupName}")` will break if `groupName` contains spaces or special characters. Use `.queryString("groupname", groupName)` instead — it URL-encodes the value automatically and is the documented pattern.
+- **`GET /admin/v1/orgs/.../memberships`** — returns 405; the endpoint is POST-only. There is no Admin API to list members — use Jira REST `GET /rest/api/3/group/member`.
+- **Omitting `includeInactiveUsers=true` when listing members** — silently drops deactivated/suspended/invited members, so the count comes up short of the admin UI.
+- **Not filtering `accountType` when listing members** — `app`-type accounts (Marketplace apps, integrations, service accounts) are returned alongside humans and inflate the count beyond the admin Members tab. Filter `accountType == "atlassian"` for human users.
+- **`isLast = body.isLast ?: true` for pagination** — Groovy's Elvis treats `false ?: true` as `true`, so the loop ends a page early. Stop when a page returns fewer than `maxResults` instead.
+- **Trusting the `active` field from `group/member`** — unreliable; it can report `true` for suspended/deactivated users. Use `includeInactiveUsers` + `accountType`.
+- **Bulk-removing group members to revoke one product** — a group can grant multiple products at once; removing members revokes all of them. Check the group's Apps tab first; to drop a single product, remove its grant from the group instead.
