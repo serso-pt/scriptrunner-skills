@@ -1,6 +1,8 @@
 ---
 name: scriptrunner-groovy
 description: Use when a user asks to write, debug, refactor, or review a ScriptRunner Cloud Groovy script, or mentions HAPI, Issues.getByKey, Issues.create, listeners, script fields, jobs, escalation services, workflow post functions, conditions, validators, ComponentAccessor, or addComment in a Cloud context
+version: "1.1.0"
+updated: "2026-05-31"
 ---
 
 # ScriptRunner Cloud Groovy Scripting

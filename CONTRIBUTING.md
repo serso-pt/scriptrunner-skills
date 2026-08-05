@@ -117,6 +117,7 @@ Restart your agent. Ask a question that should trigger the skill. Verify it load
 - [ ] Code examples are complete (no placeholders)
 - [ ] Tested locally via symlink install
 - [ ] README.md updated if adding a new skill (add to the Skills table)
+- [ ] `version` bumped and `updated` set to today per the [Versioning](#versioning) section
 
 ## Improving Existing Skills
 
@@ -139,9 +140,28 @@ To verify an untested client:
 2. Run the Verify & Test prompt from that file (`List the 5 most recently updated issues…`). Confirm real Jira data is returned.
 3. Note any steps that needed adjustment and update the relevant section.
 4. In the Quick Reference table at the bottom of `MCP_INSTALL.md`, change the client's status from ⚠️ to ✅ and update the tested note.
-5. Open a PR — no new skill files needed, just the `MCP_INSTALL.md` edit.
+5. Bump `version` and `updated` per the [Versioning](#versioning) section, and update **Last verified against the Rovo MCP** to the date you actually ran the test — only if you ran it end-to-end.
+6. Open a PR — no new skill files needed, just the `MCP_INSTALL.md` edit.
 
 Keep the ✅ / ⚠️ legend consistent: ✅ means verified end-to-end in this repo, ⚠️ means configured from official docs but not verified here.
+
+## Versioning
+
+`skills/*/SKILL.md` frontmatter and the top of `MCP_INSTALL.md` each carry `version` (semver) and `updated` (ISO date, `YYYY-MM-DD`). This exists because skills are also distributed as a zip upload to Claude Desktop, which has no git history — the version string is the only record of what's installed and how old it is.
+
+**Always bump `version` and `updated` together, in the same edit, to the date of that edit.** A version bump with a stale date is worse than no version at all — don't let that happen.
+
+For skills (`skills/*/SKILL.md`):
+- **MAJOR** — a documented pattern is reversed or removed (guidance an agent relied on is now wrong or gone)
+- **MINOR** — new section, pattern, API reference, or Common Mistakes entry
+- **PATCH** — typos, wording, formatting; no change to what an agent would produce
+
+For `MCP_INSTALL.md`:
+- **MAJOR** — endpoint/transport change affecting all clients (e.g. an `/v1/sse` → `/v1/mcp` migration), or a restructure of the guide
+- **MINOR** — new client section, a client flipped ⚠️ → ✅, or a new troubleshooting entry
+- **PATCH** — typos, link fixes, wording
+
+`MCP_INSTALL.md` additionally carries **Last verified against the Rovo MCP** — only set this to a date you actually ran the Verify & Test prompt end-to-end; don't set it to the commit date by default.
 
 ## Reporting Issues
 

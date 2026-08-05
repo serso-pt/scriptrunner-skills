@@ -1,6 +1,8 @@
 ---
 name: scriptrunner-behaviours
 description: Use when a user asks to write, debug, refactor, or review a ScriptRunner Cloud behaviour in TypeScript, or mentions getFieldById, getContext, makeRequest, ONLOAD, ONCHANGE, extensions.yaml, field visibility, field validation, or template pre-filling on issue screens
+version: "1.0.0"
+updated: "2026-05-22"
 ---
 
 # ScriptRunner Cloud Behaviours (TypeScript)

@@ -1,6 +1,8 @@
 ---
 name: scriptrunner-discovery
 description: Use when a user needs to find Jira custom field IDs, test a JQL query, inspect an issue's data structure, discover project keys, look up workflow statuses, or find transition IDs, role IDs, issue type IDs, or link type IDs before writing ScriptRunner scripts
+version: "1.0.0"
+updated: "2026-05-22"
 ---
 
 # ScriptRunner Jira Discovery

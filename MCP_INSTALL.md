@@ -1,5 +1,7 @@
 # Atlassian Rovo MCP Server — Installation Guide
 
+> **Version:** 1.1.0 · **Updated:** 2026-05-28 · **Last verified against the Rovo MCP:** 2026-05-28
+
 This guide explains how to connect any MCP-compatible AI tool to the official Atlassian Rovo MCP server so you can query Jira, discover field IDs, inspect workflows, and test ScriptRunner scripts directly from your AI assistant.
 
 Most clients use a **project-local config file** created in this repo directory. Cline and Windsurf use global config files stored in your home directory. Either way, config files are created during setup (not pre-existing) — each developer creates the file appropriate for their AI client.
