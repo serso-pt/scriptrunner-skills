@@ -1,6 +1,6 @@
 # Atlassian Rovo MCP Server — Installation Guide
 
-> **Version:** 1.1.0 · **Updated:** 2026-05-28 · **Last verified against the Rovo MCP:** 2026-05-28
+> **Version:** 1.2.0 · **Updated:** 2026-08-05 · **Last verified against the Rovo MCP:** 2026-08-05
 
 This guide explains how to connect any MCP-compatible AI tool to the official Atlassian Rovo MCP server so you can query Jira, discover field IDs, inspect workflows, and test ScriptRunner scripts directly from your AI assistant.
 
@@ -12,6 +12,7 @@ Most clients use a **project-local config file** created in this repo directory.
 
 Once connected, your AI tool can:
 
+**Jira**
 - Search Jira issues using JQL
 - Retrieve individual issues and their custom field values
 - List projects, boards, sprints, and epics
@@ -20,7 +21,20 @@ Once connected, your AI tool can:
 - Create and update issues, add comments, transition issue states
 - Look up issue types, link types, and role IDs
 
-All operations respect your existing Jira Cloud permissions.
+**Confluence**
+- List spaces and pages, fetch page content and descendants
+- Search pages with CQL
+- Read and create footer/inline comments
+- Create and update pages
+
+**Bitbucket** — see [Bitbucket prerequisites](#bitbucket-prerequisites) before relying on this
+- List workspaces and repositories
+- Read repository file content
+- List, inspect pull requests
+- Inspect pipelines, deployments, and environments
+- Fetch commit reports and annotations
+
+All operations respect your existing Atlassian Cloud permissions for each product.
 
 ---
 
@@ -28,16 +42,29 @@ All operations respect your existing Jira Cloud permissions.
 
 The Atlassian Rovo MCP exposes two distinct categories of tools. They have different capabilities and different token requirements:
 
-**Standard Jira tools** — CRUD operations: search issues by JQL, get issue details, list projects and boards, add comments, transition issues, look up field/role/type IDs. Work with classic API tokens (if org API token auth is enabled) or OAuth.
+**Product CRUD tools** — CRUD-style operations against Jira, Confluence, and Bitbucket: search issues by JQL, get issue details, list projects and boards, add comments, transition issues, look up field/role/type IDs, read/write Confluence pages, list Bitbucket workspaces/repos/PRs. Work with classic API tokens (if org API token auth is enabled) or OAuth. Bitbucket additionally requires the [prerequisites below](#bitbucket-prerequisites).
 
 **Teamwork Graph tools** (`getTeamworkGraphContext` / `getTeamworkGraphObject`) — relationship and connection queries across Atlassian products: issues linked to Confluence pages, pull requests, Loom videos, goals, teams, and third-party objects. Require **fine-grained (scoped) API tokens** or OAuth. Classic API tokens (`ATATT3x…` format) always return `403` for Graph tools.
 
 | Use case | Tool category | Token requirement |
 |----------|--------------|-------------------|
-| JQL search, get issue, list projects, field IDs | Standard Jira tools | Classic or fine-grained or OAuth |
+| JQL search, get issue, list projects, field IDs | Product CRUD tools | Classic or fine-grained or OAuth |
+| Confluence pages, spaces, comments | Product CRUD tools | Classic or fine-grained or OAuth |
+| Bitbucket workspaces, repos, PRs, pipelines | Product CRUD tools | Classic or fine-grained or OAuth, **and** workspace must be org-linked |
 | Issue ↔ page, issue ↔ PR, cross-product relationships | Teamwork Graph tools | Fine-grained or OAuth only |
 
-> **Rule:** Use standard Jira tools for anything described as "search", "get", "list", "create", or "update". Use Graph tools only when the question is about **connections between entities**.
+> **Rule:** Use Product CRUD tools for anything described as "search", "get", "list", "create", or "update". Use Graph tools only when the question is about **connections between entities**.
+
+### Addressing Bitbucket (no cloudId)
+
+Jira and Confluence tools take a `cloudId` from `getAccessibleAtlassianResources`. Bitbucket tools do **not** — they take a `workspaceId` (workspace slug, e.g. `serso-pt`) and a `repoId` (repo slug). Bitbucket workspaces will never appear in `getAccessibleAtlassianResources` output; use `bitbucketWorkspace(action="list")` to discover them. Their absence from that list is normal and is not evidence Bitbucket is disconnected.
+
+### Bitbucket prerequisites
+
+- **Bitbucket Cloud only.** Bitbucket Data Center / Server (self-hosted) is not supported by the Rovo MCP server.
+- **The workspace must be linked to an Atlassian organization.** Bitbucket Cloud tools are published only for org-linked workspaces. Workspaces created before the Atlassian-account migration and never claimed into an organization at `admin.atlassian.com` will fail or return no data even with valid credentials and a working Jira connection. Check at `admin.atlassian.com` → your org → **Products** whether the workspace is listed. If it is not, an org admin must link it — no client-side config change fixes this.
+- There is no `*.atlassian.net` address for Bitbucket — Bitbucket Cloud is always `bitbucket.org/<workspace>`.
+- OAuth is confirmed working against an org-linked workspace (verified 2026-08-05). If Bitbucket tools fail under OAuth while Jira succeeds, try a fine-grained (scoped) API token with all scopes kept — see [Create a fine-grained (scoped) API token](#create-a-fine-grained-scoped-api-token).
 
 ---
 
@@ -78,6 +105,7 @@ The general approach is always:
 | MCP-compatible AI client | Claude Code, OpenCode, Cline, VS Code (Copilot/Cline/Continue), Cursor, Windsurf, or any SSE-capable MCP host |
 | Atlassian Cloud account | Must have access to your Jira Cloud site |
 | Internet access | Requires HTTPS to `https://mcp.atlassian.com` |
+| Bitbucket access (optional) | Bitbucket Cloud workspace linked to your Atlassian organization — see [Bitbucket prerequisites](#bitbucket-prerequisites) |
 
 ---
 
@@ -89,7 +117,7 @@ Use OAuth 2.1 via browser (automatic for most clients) for the simplest setup an
 
 There are two types of Atlassian API tokens, and they are **not interchangeable** for MCP use:
 
-| Token type | Format starts with | Standard Jira tools | Teamwork Graph tools |
+| Token type | Format starts with | Product CRUD tools | Teamwork Graph tools |
 |------------|--------------------|---------------------|---------------------|
 | Classic API token | `ATATT3x…` | ✓ (if org setting enabled) | ✗ — always returns `403` |
 | Fine-grained (scoped) API token | Different format | ✓ | ✓ |
@@ -535,6 +563,14 @@ project = KEY ORDER BY updated DESC
 
 If results return, the MCP is working. If you get "project not found", verify that `KEY` matches a project you have access to in Jira.
 
+If you also need Bitbucket, ask (replace `<workspace-slug>` with your Bitbucket workspace, e.g. `serso-pt`):
+
+```
+List my Bitbucket workspaces, then list the repositories in <workspace-slug>.
+```
+
+A successful response listing your workspace and its repositories confirms Bitbucket access. If this fails while the Jira test above succeeds, see [Bitbucket prerequisites](#bitbucket-prerequisites) and the Troubleshooting entry below.
+
 **Per-client verification commands:**
 
 | Client | Command |
@@ -582,6 +618,15 @@ This only affects sites where **custom domains** are configured; sites using the
 
 **Both folders/sites connect to the same Atlassian site despite separate configs:**
 This only happens when two MCP server entries point at the **same** endpoint URL (e.g. two folders both configured with `https://mcp.atlassian.com/v1/mcp` to reach different Atlassian sites). The OAuth credential is keyed by the server URL origin, so both entries share one token — the second authentication overwrites the first, and both folders end up connected to whichever site was authenticated last. Fix: keep one entry on the plain URL and give the other a differentiating query param (e.g. `https://mcp.atlassian.com/v1/mcp?site=second`). The param does **not** change which site you connect to (that is chosen at the consent screen) — it only forces a separate token store. Authenticate each folder independently. To verify isolation, from each folder ask the assistant to call `getAccessibleAtlassianResources` and confirm each returns a different `cloudId`; for a stronger check, run a JQL search for content that exists only on one site. Note that `getAccessibleAtlassianResources` may list every site the account can reach, so the `cloudId` actually hit by real queries is the definitive test — not the resource list alone.
+
+**"Bitbucket doesn't seem to be connected" / "the MCP cannot access the repos":**
+First, note that Bitbucket is not listed by `getAccessibleAtlassianResources` — that tool returns only Jira/Confluence sites, because Bitbucket is addressed by workspace slug rather than cloudId (see [Addressing Bitbucket](#addressing-bitbucket-no-cloudid)). Its absence there is normal and is **not** evidence of a problem. Test directly with `bitbucketWorkspace(action="list")`. If your workspaces come back, Bitbucket is working.
+
+If that call returns an error or an empty list while Jira works, check in this order:
+
+1. **Is it Bitbucket Cloud?** Data Center / Server (self-hosted) is not supported.
+2. **Is the workspace linked to an Atlassian organization?** This is the most common cause. Bitbucket Cloud tools are published only for org-linked workspaces. Verify at `admin.atlassian.com` → your org → **Products**. Older standalone workspaces are often not linked. Only an org admin can fix this.
+3. **Auth.** OAuth is confirmed working against an org-linked workspace. If Bitbucket tools fail under OAuth while Jira succeeds, try a fine-grained (scoped) API token with all scopes kept.
 
 **"Permission denied" on Jira queries:**
 The MCP server uses your Atlassian account's existing permissions. If you cannot see a project in Jira, the MCP will not return data from it either.
